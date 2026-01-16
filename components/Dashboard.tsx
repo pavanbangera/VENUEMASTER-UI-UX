@@ -29,8 +29,103 @@ const Dashboard: React.FC<DashboardProps> = ({ setCurrentView, onViewVenue, isAu
   // Get last 5
   const recentBookings = sortedBookings.slice(0, 5);
 
-  // Prepare venues for scrolling marquee (duplicate to ensure seamless loop)
-  const scrollingVenues = [...MOCK_VENUES, ...MOCK_VENUES];
+
+  // Prepare venues for scrolling marquee (duplicate 3x for robust bi-directional loop)
+  // [Set1 (Buffer Left), Set2 (Active), Set3 (Buffer Right)]
+  const scrollingVenues = [...MOCK_VENUES, ...MOCK_VENUES, ...MOCK_VENUES];
+
+  // Auto-scroll logic
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
+  const animationRef = React.useRef<number>();
+  const [isHovered, setIsHovered] = React.useState(false);
+  const [isDragging, setIsDragging] = React.useState(false);
+  const [startX, setStartX] = React.useState(0);
+  const [scrollLeft, setScrollLeft] = React.useState(0);
+
+  // Initialize scroll position to the middle set (Set 2)
+  React.useLayoutEffect(() => {
+    if (scrollContainerRef.current) {
+      const scrollContainer = scrollContainerRef.current;
+      // We want to start at the beginning of Set 2
+      // Total width is roughly 3x set width.
+      // So reset to 1/3 of scrollWidth.
+      setTimeout(() => {
+        if (!scrollContainer) return;
+        const singleSetWidth = scrollContainer.scrollWidth / 3;
+        scrollContainer.scrollLeft = singleSetWidth;
+      }, 0);
+    }
+  }, []);
+
+  const handleScroll = () => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    const currentScroll = scrollContainer.scrollLeft;
+    const scrollWidth = scrollContainer.scrollWidth;
+    const singleSetWidth = scrollWidth / 3;
+
+    // Bi-directional infinite loop checks
+
+    // 1. If we hit the start of Set 1 (0), jump to start of Set 2
+    if (currentScroll <= 0) {
+      scrollContainer.scrollLeft = singleSetWidth;
+    }
+    // 2. If we hit the start of Set 3 (2/3 width), jump to start of Set 2
+    else if (currentScroll >= 2 * singleSetWidth) {
+      // Maintain the exact offset to keep it smooth
+      const offset = currentScroll - (2 * singleSetWidth);
+      scrollContainer.scrollLeft = singleSetWidth + offset;
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!scrollContainerRef.current) return;
+    setIsDragging(true);
+    setStartX(e.pageX - scrollContainerRef.current.offsetLeft);
+    setScrollLeft(scrollContainerRef.current.scrollLeft);
+  };
+
+  const handleMouseLeave = () => {
+    setIsDragging(false);
+    setIsHovered(false);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !scrollContainerRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - scrollContainerRef.current.offsetLeft;
+    const walk = (x - startX) * 2; // Scroll-fast
+    scrollContainerRef.current.scrollLeft = scrollLeft - walk;
+  };
+
+  React.useEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    const scroll = () => {
+      // Pause animation if interacting
+      if (isDragging || isHovered) {
+        animationRef.current = requestAnimationFrame(scroll);
+        return;
+      }
+
+      // Auto-scroll increment
+      scrollContainer.scrollLeft += 0.5;
+
+      animationRef.current = requestAnimationFrame(scroll);
+    };
+
+    animationRef.current = requestAnimationFrame(scroll);
+
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    };
+  }, [isDragging, isHovered]);
 
   // Filter Venues Logic
   const filteredVenues = MOCK_VENUES.filter(venue => {
@@ -177,8 +272,24 @@ Thank you for booking with VenueMaster AI!
           </div>
         </div>
 
-        <div className="relative w-full overflow-hidden bg-gradient-to-b from-white to-slate-50/50 border border-slate-100 rounded-lg py-2 group hover:shadow-lg transition-shadow duration-500">
-          <div className="flex animate-scroll-infinite w-max gap-3 px-3">
+        <div className="relative w-full bg-gradient-to-b from-white to-slate-50/50 border border-slate-100 rounded-lg py-2 group hover:shadow-lg transition-shadow duration-500">
+          <div
+            ref={scrollContainerRef}
+            onScroll={handleScroll}
+            onMouseDown={handleMouseDown}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => {
+              setIsHovered(false);
+              handleMouseLeave();
+            }}
+            onMouseUp={handleMouseUp}
+            onMouseMove={handleMouseMove}
+            className={`
+              flex w-full gap-3 px-3 overflow-x-auto scrollbar-hide select-none
+              ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}
+            `}
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
             {scrollingVenues.map((venue, index) => {
               const Icon = getVenueIcon(venue.type);
               return (

@@ -87,7 +87,7 @@ const App: React.FC = () => {
 
 
   return (
-    <div className="h-screen bg-slate-50 flex font-sans overflow-hidden">
+    <div className="h-screen bg-slate-50 flex font-sans overflow-hidden select-none">
       <Toaster
         position="top-center"
         containerStyle={{
